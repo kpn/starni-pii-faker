@@ -4,7 +4,7 @@ import json
 import faker_anonymization
 
 # Read recipe inputs
-golden_dataset_round1_df = pd.read_csv("data/golden_dataset_round1.dat", sep="|")
+golden_dataset_round1_df = pd.read_csv("data/faker_input.dat", sep="|")
 
 anonymized_transcripts = []
 anonymized_labels = []
