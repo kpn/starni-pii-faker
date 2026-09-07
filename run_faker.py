@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import pandas as pd, numpy as np
+import pandas as pd
 import json
 import faker_anonymization
 
@@ -40,3 +40,4 @@ golden_dataset_round1_original_and_anonymized_df = golden_dataset_round1_df
 golden_dataset_round1_original_and_anonymized_df.to_csv(
     "data/faker_output.dat", sep="|", index=False
 )
+

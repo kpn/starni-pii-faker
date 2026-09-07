@@ -2,7 +2,6 @@ from faker import Faker
 import random
 from Levenshtein import ratio
 from fuzzywuzzy import process
-import json
 from os.path import dirname, join
 
 from faker.providers.address.nl_NL import Provider as NLLocation
