@@ -9,13 +9,13 @@ from faker.providers.address.nl_NL import Provider as NLLocation
 all_cities = list(NLLocation.cities)
 
 references_path= join(dirname(__file__), "deidentify", "surrogates", "generators", "resources")
-with open(join(references_path, "lastnames.csv"), "r", encoding="utf-8") as f:
+with open(join(references_path, "last_names.csv"), "r", encoding="utf-8") as f:
     all_last_names = [line.replace(',', ' ').strip() for line in f.readlines()[1:]]  # Skip the header line
 
-with open(join(references_path, "firstnames_male.txt"), "r", encoding="utf-8") as f:
+with open(join(references_path, "first_names_male.txt"), "r", encoding="utf-8") as f:
     all_male_names = [line.strip() for line in f.readlines()]
 
-with open(join(references_path, "firstnames_female.txt"), "r", encoding="utf-8") as f:
+with open(join(references_path, "first_names_female.txt"), "r", encoding="utf-8") as f:
     all_female_names = [line.strip() for line in f.readlines()]
 
 all_first_names = all_male_names + all_female_names
