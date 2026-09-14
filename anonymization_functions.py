@@ -20,6 +20,7 @@ with open(join(references_path, "first_names_female.txt"), "r", encoding="utf-8"
 all_first_names = all_male_names + all_female_names
 
 
+# Specify Faker locale
 fake = Faker('nl_NL')
 
 
@@ -198,7 +199,8 @@ def replace_digits(real_pii):
 
 def check_if_asr_error(real_pii, category, levenshtein_treshold):
     """
-    Function to check if a real PII is an ASR error by comparing it to the list of all known PII for that category using Levenshtein distance
+    Function to check if a real PII is an ASR error by comparing it to the list of all known PII for that category using Levenshtein distance.
+    Currently only supported for NAME_GIVEN_PII, NAME_FAMILY_PII, and LOCATION_CITY_PII.
 
     Args:
         real_pii (str): The real PII to check
@@ -208,6 +210,8 @@ def check_if_asr_error(real_pii, category, levenshtein_treshold):
     Returns:
         bool: True if real_pii is an ASR error (no match found between real_pii and reference list that surpasses treshold), False otherwise
     """
+    if category not in {"NAME_GIVEN_PII", "NAME_FAMILY_PII", "LOCATION_CITY_PII"}:
+        raise ValueError(f"ASR error check not supported for category: {category}")
 
     if category == "NAME_GIVEN_PII":
         check_list = all_first_names
