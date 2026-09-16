@@ -20,6 +20,7 @@ with open(join(references_path, "first_names_female.txt"), "r", encoding="utf-8"
 all_first_names = all_male_names + all_female_names
 
 
+# Specify Faker locale
 fake = Faker('nl_NL')
 
 
@@ -198,7 +199,8 @@ def replace_digits(real_pii):
 
 def check_if_asr_error(real_pii, category, levenshtein_treshold):
     """
-    Function to check if a real PII is an ASR error by comparing it to the list of all known PII for that category using Levenshtein distance
+    Function to check if a real PII is an ASR error by comparing it to the list of all known PII for that category using Levenshtein distance.
+    Currently only supported for NAME_GIVEN_PII, NAME_FAMILY_PII, and LOCATION_CITY_PII.
 
     Args:
         real_pii (str): The real PII to check
@@ -208,6 +210,8 @@ def check_if_asr_error(real_pii, category, levenshtein_treshold):
     Returns:
         bool: True if real_pii is an ASR error (no match found between real_pii and reference list that surpasses treshold), False otherwise
     """
+    if category not in {"NAME_GIVEN_PII", "NAME_FAMILY_PII", "LOCATION_CITY_PII"}:
+        raise ValueError(f"ASR error check not supported for category: {category}")
 
     if category == "NAME_GIVEN_PII":
         check_list = all_first_names
@@ -246,7 +250,7 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
         real_pii = annotation['text']
         # For NON_PII, keep the orignal text
         if "NON-PII" in category:
-            all_replacements.append((category, real_pii, real_pii))
+            all_replacements.append(real_pii)
         else:
             seen_real_piis = list(real_to_fake_mapping.keys())
             # Compute Levenshtein distance between real_pii and previously seen real piis, except for DOB, ZIP, and ADDRESS, which are often uttured in multiple overlapping parts in a transcript. This would otherwise often result in these partial utterances matching with each other, causing them to all be replaced by the same PII. However, we replace these real PII by fake PII following the same format as the real PII, as can be seen in the choose_dob_format, choose_zip_format, and choose_address_format functions.
@@ -256,7 +260,7 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
                 fake_pii = real_to_fake_mapping[matched_seen_pii]
                 # Ensure case consistency between fake and real PII
                 fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
-                all_replacements.append((category, real_pii, fake_pii))
+                all_replacements.append(fake_pii)
                 
             # Else, we assume we have not seen this real_pii before
             else:
@@ -281,7 +285,7 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
                     fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
 
                 real_to_fake_mapping[real_pii.lower()] = fake_pii
-                all_replacements.append((category, real_pii, fake_pii))
+                all_replacements.append(fake_pii)
 
     return all_replacements
 
