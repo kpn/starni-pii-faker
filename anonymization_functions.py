@@ -5,6 +5,10 @@ from fuzzywuzzy import process
 from os.path import dirname, join
 
 from faker.providers.address.nl_NL import Provider as NLLocation
+
+#######################################################################################################################################
+# Adjust values in this section (NLLocation, names text files, 'nl_NL', and month_mapping) to adapt anonymization to different language
+
 all_cities = list(NLLocation.cities)
 
 references_path= join(dirname(__file__), "deidentify", "surrogates", "generators", "resources")
@@ -23,7 +27,6 @@ all_first_names = all_male_names + all_female_names
 # Specify Faker locale
 fake = Faker('nl_NL')
 
-
 # Month number to name mapping
 month_mapping = {
     '01': 'januari',
@@ -39,6 +42,8 @@ month_mapping = {
     '11': 'november',
     '12': 'december'
 }
+#########################################################################################################################
+
 
 email_domain_list = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "protonmail.com", "aol.com", "zoho.com", "gmx.com", "mail.com"]
 

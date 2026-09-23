@@ -93,9 +93,18 @@ print(anonymized_transcript)
 # My name is de bruin, Lisanne De Bruin
 ```
 
+For a subset of PII categories (NAME_GIVEN, NAME_FAMILY, LOCATION_CITY), we check if the annotated PII contains a (large) ASR error by computing the Levenshtein distance between the PII and all entities of a comprehensive list of names/cities. If no match is found (i.e., the PII is not sufficiently similar to any entry in the list), the PII is regarded as an ASR error and is not replaced.
+```python
+transcript = "Hi, my name is Luxe"
+annotations = [{"text":"Luxe","beginningIndex":15,"endIndex":19,"category":"NAME_GIVEN_PII"}]
+
+print(anonymized_transcript)
+# Hi, my name is Luxe
+```
+
 ## Contributing
 
-To support another language, add files in the deidentify/surrogates/generators/resources folder containing the comprehensive given/family names lists for the respective language, and specify a different locale when you instantiate the Faker object in anonymization_functions.py:
+To add support for a new language, add files in the deidentify/surrogates/generators/resources folder containing the comprehensive given/family names lists for the respective language, and specify a different locale when you instantiate the Faker object in anonymization_functions.py:
 ```python
 fake = Faker('nl_NL')
 ```
