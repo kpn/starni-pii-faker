@@ -56,7 +56,7 @@ anonymized_labels: Indicates the updated positions of the value of the substitut
 ## Examples
 ```python 
 transcript = "Hello my name is Tom, I live in Amsterdam"
-annotations = [{"text":"Tom","beginningIndex":17,"endIndex":20,"category":"NAME_GIVEN_PII"},{"text":"Amsterdam","beginningIndex":31,"endIndex":40,"category":"LOCATION_CITY_PII"}]
+annotations = [{"text":"Tom","beginningIndex":17,"endIndex":20,"category":"NAME_GIVEN_PII"},{"text":"Amsterdam","beginningIndex":32,"endIndex":41,"category":"LOCATION_CITY_PII"}]
 
 print(anonymized_transcript)
 # Hello my name is Julius I live in Gronsveld
@@ -78,7 +78,7 @@ print(anonymized_transcript)
 
 ```python
 transcript = "1022 Arnold Berend is my postal code"
-annotations = [{"text":"1022 Arnold Berend","beginningIndex":0,"endIndex":17,"category":"LOCATION_ZIP_PII"}]
+annotations = [{"text":"1022 Arnold Berend","beginningIndex":0,"endIndex":18,"category":"LOCATION_ZIP_PII"}]
 
 print(anonymized_transcript)
 # 1061 Wessel Michad is my postal code
@@ -87,7 +87,7 @@ print(anonymized_transcript)
 Moreover, the same or very similar real PII in a transcript are replaced by the same fake PII. We use Levenhstein Distance to compute similarity between PII.
 ```python
 transcript = "My name is berend, Noah Berendse"
-annotations = [{"text":"berend","beginningIndex":11,"endIndex":17,"category":"NAME_FAMILY_PII"}, {"text":"Noah","beginningIndex":19,"endIndex":23,"category":"NAME_GIVEN_PII"}, {"text":"Berendse","beginningIndex":24,"endIndex":33,"category":"NAME_FAMILY_PII"}]
+annotations = [{"text":"berend","beginningIndex":11,"endIndex":17,"category":"NAME_FAMILY_PII"}, {"text":"Noah","beginningIndex":19,"endIndex":23,"category":"NAME_GIVEN_PII"}, {"text":"Berendse","beginningIndex":24,"endIndex":32,"category":"NAME_FAMILY_PII"}]
 
 print(anonymized_transcript)
 # My name is de bruin, Lisanne De Bruin
