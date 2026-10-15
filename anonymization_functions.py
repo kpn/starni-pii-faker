@@ -1,5 +1,7 @@
 from faker import Faker
 import random
+import re
+import string
 from Levenshtein import ratio
 from fuzzywuzzy import process
 from os.path import dirname, join
@@ -9,11 +11,11 @@ from faker.providers.address.nl_NL import Provider as NLLocation
 #######################################################################################################################################
 # Adjust values in this section (NLLocation, names text files, 'nl_NL', and month_mapping) to adapt anonymization to different language
 
-all_cities = list(NLLocation.cities)
+ALL_CITIES = list(NLLocation.cities)
 
 references_path= join(dirname(__file__), "deidentify", "surrogates", "generators", "resources")
 with open(join(references_path, "last_names.csv"), "r", encoding="utf-8") as f:
-    all_last_names = [line.replace(',', ' ').strip() for line in f.readlines()[1:]]  # Skip the header line
+    ALL_LAST_NAMES = [line.replace(',', ' ').strip() for line in f.readlines()[1:]]  # Skip the header line
 
 with open(join(references_path, "first_names_male.txt"), "r", encoding="utf-8") as f:
     all_male_names = [line.strip() for line in f.readlines()]
@@ -21,14 +23,14 @@ with open(join(references_path, "first_names_male.txt"), "r", encoding="utf-8") 
 with open(join(references_path, "first_names_female.txt"), "r", encoding="utf-8") as f:
     all_female_names = [line.strip() for line in f.readlines()]
 
-all_first_names = all_male_names + all_female_names
+ALL_FIRST_NAMES = all_male_names + all_female_names
 
 
 # Specify Faker locale
 fake = Faker('nl_NL')
 
 # Month number to name mapping
-month_mapping = {
+MONTH_MAPPING = {
     '01': 'januari',
     '02': 'februari',
     '03': 'maart',
@@ -42,13 +44,13 @@ month_mapping = {
     '11': 'november',
     '12': 'december'
 }
-#########################################################################################################################
+
+EMAIL_DOMAINS = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "protonmail.com", "aol.com", "zoho.com", "gmx.com", "mail.com"]
+
+SPELLED_OUT_NUMBERS = ['nul', 'een', 'twee', 'drie', 'vier', 'vijf', 'zes', 'zeven', 'acht', 'negen']
 
 
-email_domain_list = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "protonmail.com", "aol.com", "zoho.com", "gmx.com", "mail.com"]
-
-
-def pii_category_to_faker(category):
+def pii_category_to_faker(category, real_pii):
     # Helper function to map the PII categories to the corresponding faker function
 
     if category == "NAME_GIVEN_PII":
@@ -60,7 +62,7 @@ def pii_category_to_faker(category):
     elif category == "LOCATION_ADDRESS_PII":
         return fake.street_address()
     elif category == "LOCATION_ZIP_PII":
-        # Create fake names to use for the zipcode  phonetic spelling
+        # Also create fake names to use for the phonetic zipcode spelling
         return [fake.postcode(), fake.first_name(), fake.first_name()]
     elif category == "LOCATION_CITY_PII":
         return fake.city()
@@ -71,13 +73,72 @@ def pii_category_to_faker(category):
         return fake_province
     elif category == "EMAIL_ADDRESS_PII":
         fake_email = fake.email()
-        return fake_email.split("@")[0] + '@' + random.choice(email_domain_list)
+        return fake_email.split("@")[0] + '@' + random.choice(EMAIL_DOMAINS)
     elif category == "AGE_PII":
         return str(fake.random_int(min=18, max=80))
     elif category == "ORGANIZATION_PII":
         return fake.company()
+    elif category in ["PHONE_NUMBER_PII", "INTERNAL_ID_PII", "BANK_ACCOUNT_PII", "SERIAL_NUMBER_PII", "SECRET_PII"]:
+        return replace_alphanumeric_string(category, real_pii)
     else:
-        return None
+        raise ValueError(f"PII category not supported: {category}")
+
+
+def replace_alphanumeric_string(category, real_pii):
+    # Randomly replace each alphanumeric character, to be used for phone number, internal ID, bank account, secret, and serial number PII categories.
+    result = []
+    # Match spelled-out digits as complete words so their letters are replaced together.
+    spelled_out_pattern = re.compile(r"\b(?:" + "|".join(SPELLED_OUT_NUMBERS) + r")\b", re.IGNORECASE)
+    digits = string.digits
+    spelled_out_matches = {match.start(): match for match in spelled_out_pattern.finditer(real_pii)}
+    preserved_positions = set()
+
+    def replace_spelled_out_number(match):
+        original = match.group()
+        # Choose a different number word and retain the input's capitalization style.
+        replacement = random.choice([number for number in SPELLED_OUT_NUMBERS if number != original.lower()])
+        if original.isupper():
+            return replacement.upper()
+        if original.istitle():
+            return replacement.title()
+        return replacement
+
+    # Preserve Dutch phone-prefix markers (06 or 6) at the start of the string.
+    for token_index, token_match in enumerate(re.finditer(r"[^\W_]+", real_pii)):
+        token = token_match.group().lower()
+        if (token_index == 0 and token in {"0", "nul"}) or (
+            token_index < 2 and token in {"6", "zes"}
+        ):
+            preserved_positions.update(range(token_match.start(), token_match.end()))
+
+    position = 0
+    while position < len(real_pii):
+        match = spelled_out_matches.get(position)
+        # If we find a spelled out number at the current position, handle it as a whole.
+        if match:
+            # Make sure to not replace spelled-out phone-prefix numbers.
+            if category == "PHONE_NUMBER_PII" and position in preserved_positions:
+                result.append(match.group())
+            else:
+                result.append(replace_spelled_out_number(match))
+            position = match.end()
+            continue
+
+        # If not spelled-out number (no match), handle the character individually.
+        char = real_pii[position]
+        # Make sure to not replace phone-prefix digits.
+        if category == "PHONE_NUMBER_PII" and position in preserved_positions:
+            result.append(char)
+        elif char.isdigit():
+            result.append(random.choice([digit for digit in digits if digit != char]))
+        elif char.isalpha():
+            alphabet = string.ascii_uppercase if char.isupper() else string.ascii_lowercase
+            result.append(random.choice([letter for letter in alphabet if letter != char]))
+        else:
+            result.append(char)
+        position += 1
+
+    return ''.join(result)
 
 
 def choose_dob_format(fake_dob, real_dob):
@@ -87,7 +148,7 @@ def choose_dob_format(fake_dob, real_dob):
 
     day = parts[2]
     month_number = parts[1]
-    month_name = month_mapping.get(month_number, month_number)
+    month_name = MONTH_MAPPING.get(month_number, month_number)
     year = parts[0]
     year_last_two = year[-2:] if int(year) < 2000 else year
 
@@ -187,29 +248,14 @@ def choose_zip_format(fake_zip, real_zip):
         return digits + " " + letters
 
 
-def replace_digits(real_pii):
-    # Function to replace digits in a string with random digits, but keep '06' and '0 6' at the beginning of a string unchanged (for Dutch phone numbers)
-    digits = '0123456789'
-    result = []
-    for index, char in enumerate(real_pii):
-        if char in {'0', '6'} and index < 3:
-            result.append(char)
-        elif char.isdigit():
-            replacement_digits = [d for d in digits if d != char]
-            result.append(random.choice(replacement_digits))
-        else:
-            result.append(char)
-    return ''.join(result)
-
-
-def check_if_asr_error(real_pii, category, levenshtein_treshold):
+def check_if_asr_error(category, real_pii, levenshtein_treshold):
     """
     Function to check if a real PII is an ASR error by comparing it to the list of all known PII for that category using Levenshtein distance.
     Currently only supported for NAME_GIVEN_PII, NAME_FAMILY_PII, and LOCATION_CITY_PII.
 
     Args:
-        real_pii (str): The real PII to check
         category (str): The category of the real PII
+        real_pii (str): The real PII to check
         levenshtein_treshold (float): Threshold for Levenshtein distance to consider two strings as similar
     
     Returns:
@@ -219,11 +265,11 @@ def check_if_asr_error(real_pii, category, levenshtein_treshold):
         raise ValueError(f"ASR error check not supported for category: {category}")
 
     if category == "NAME_GIVEN_PII":
-        check_list = all_first_names
+        check_list = ALL_FIRST_NAMES
     elif category == "NAME_FAMILY_PII":
-        check_list = all_last_names
+        check_list = ALL_LAST_NAMES
     elif category == "LOCATION_CITY_PII":
-        check_list = all_cities
+        check_list = ALL_CITIES
 
     if process.extractOne(real_pii, check_list, scorer=ratio, score_cutoff=levenshtein_treshold):
         return False
@@ -253,44 +299,43 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
     for annotation in annotations:
         category = annotation['category']
         real_pii = annotation['text']
-        # For NON_PII, keep the orignal text
+        # For NON_PII, keep the original text
         if "NON-PII" in category:
             all_replacements.append(real_pii)
+            continue
+
+        seen_real_piis = list(real_to_fake_mapping.keys())
+        # Compute Levenshtein distance between real_pii and previously seen real piis, except for DOB, ZIP, and ADDRESS, which are often uttured in multiple overlapping parts in a transcript. This would otherwise often result in these partial utterances matching with each other, causing them to all be replaced by the same PII. However, we replace these real PII by fake PII following the same format as the real PII, as can be seen in the choose_dob_format, choose_zip_format, and choose_address_format functions.
+        if process.extractOne(real_pii.lower(), seen_real_piis, scorer=ratio, score_cutoff=levenshtein_treshold) and category not in ["DATE_OF_BIRTH_PII", "LOCATION_ZIP_PII", "LOCATION_ADDRESS_PII"]:
+            # If match is found, we ensure that the same fake_pii is used again for replacing the same real_pii
+            matched_seen_pii, _ = process.extractOne(real_pii.lower(), seen_real_piis, scorer=ratio, score_cutoff=levenshtein_treshold)
+            fake_pii = real_to_fake_mapping[matched_seen_pii]
+            # Ensure case consistency between fake and real PII
+            fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
+            all_replacements.append(fake_pii)
+            
+        # Else, we assume we have not seen this real_pii before
         else:
-            seen_real_piis = list(real_to_fake_mapping.keys())
-            # Compute Levenshtein distance between real_pii and previously seen real piis, except for DOB, ZIP, and ADDRESS, which are often uttured in multiple overlapping parts in a transcript. This would otherwise often result in these partial utterances matching with each other, causing them to all be replaced by the same PII. However, we replace these real PII by fake PII following the same format as the real PII, as can be seen in the choose_dob_format, choose_zip_format, and choose_address_format functions.
-            if process.extractOne(real_pii.lower(), seen_real_piis, scorer=ratio, score_cutoff=levenshtein_treshold) and category not in ["DATE_OF_BIRTH_PII", "LOCATION_ZIP_PII", "LOCATION_ADDRESS_PII"]:
-                # If match is found, we ensure that the same fake_pii is used again for replacing the same real_pii
-                matched_seen_pii, _ = process.extractOne(real_pii.lower(), seen_real_piis, scorer=ratio, score_cutoff=levenshtein_treshold)
-                fake_pii = real_to_fake_mapping[matched_seen_pii]
+            if category == "DATE_OF_BIRTH_PII":
+                fake_pii = choose_dob_format(fake_dob, real_pii)
+            elif category == "LOCATION_ZIP_PII":
+                fake_pii = choose_zip_format(fake_zip, real_pii)
+            elif category == "LOCATION_ADDRESS_PII":
+                fake_pii = choose_address_format(fake_address, real_pii)
+            # Categories for which we have a reference list to check if the real PII is an ASR error, in which case we keep the original PII
+            elif category in ["NAME_GIVEN_PII", "NAME_FAMILY_PII", "LOCATION_CITY_PII"]:
+                if check_if_asr_error(category, real_pii, levenshtein_treshold):
+                    fake_pii = real_pii
+                else:
+                    fake_pii = pii_category_to_faker(category, real_pii)
+                    fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
+            else:
+                fake_pii = pii_category_to_faker(category, real_pii)
                 # Ensure case consistency between fake and real PII
                 fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
-                all_replacements.append(fake_pii)
-                
-            # Else, we assume we have not seen this real_pii before
-            else:
-                if category == "DATE_OF_BIRTH_PII":
-                    fake_pii = choose_dob_format(fake_dob, real_pii)
-                elif category == "LOCATION_ZIP_PII":
-                    fake_pii = choose_zip_format(fake_zip, real_pii)
-                elif category == "LOCATION_ADDRESS_PII":
-                    fake_pii = choose_address_format(fake_address, real_pii)
-                elif category == "PHONE_NUMBER_PII":
-                    fake_pii = replace_digits(real_pii)
-                # Categories for which we have a reference list to check if the real PII is an ASR error, in which case we keep the original PII
-                elif category in ["NAME_GIVEN_PII", "NAME_FAMILY_PII", "LOCATION_CITY_PII"]:
-                    if check_if_asr_error(real_pii, category, levenshtein_treshold):
-                        fake_pii = real_pii
-                    else:
-                        fake_pii = pii_category_to_faker(category)
-                        fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
-                else:
-                    fake_pii = pii_category_to_faker(category)
-                    # Ensure case consistency between fake and real PII
-                    fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
 
-                real_to_fake_mapping[real_pii.lower()] = fake_pii
-                all_replacements.append(fake_pii)
+            real_to_fake_mapping[real_pii.lower()] = fake_pii
+            all_replacements.append(fake_pii)
 
     return all_replacements
 
