@@ -45,9 +45,16 @@ MONTH_MAPPING = {
     '12': 'december'
 }
 
-EMAIL_DOMAINS = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "protonmail.com", "aol.com", "zoho.com", "gmx.com", "mail.com"]
+EMAIL_DOMAINS = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "protonmail.com", "aol.com", "zoho.com", "gmx.com", "mail.com", "live.nl", "home.nl"]
 
 SPELLED_OUT_NUMBERS = ['nul', 'een', 'twee', 'drie', 'vier', 'vijf', 'zes', 'zeven', 'acht', 'negen']
+
+NATIONALITIES = (
+    'Nederlander', 'Duitser', 'Belg', 'Fransman', 'Spanjaard',
+    'Italiaan', 'Portugees', 'Brit', 'Ier', 'Pool', 'Zweed',
+    'Deen', 'Noor', 'Fin', 'Zwitser', 'Oostenrijker', 'Griek',
+    'Turk', 'Marokkaan', 'Amerikaan', 'Canadees', 'Surinamer',
+)
 
 
 def pii_category_to_faker(category, real_pii):
@@ -78,7 +85,9 @@ def pii_category_to_faker(category, real_pii):
         return str(fake.random_int(min=18, max=80))
     elif category == "ORGANIZATION_PII":
         return fake.company()
-    elif category in ["PHONE_NUMBER_PII", "INTERNAL_ID_PII", "BANK_ACCOUNT_PII", "SERIAL_NUMBER_PII", "SECRET_PII"]:
+    elif category == "NATIONALITY_PII":
+        return fake.random_element(elements=NATIONALITIES)
+    elif category in ["PHONE_NUMBER_PII", "INTERNAL_ID_PII", "BANK_ACCOUNT_PII", "CREDIT_CARD_PII", "SERIAL_NUMBER_PII", "SECRET_PII"]:
         return replace_alphanumeric_string(category, real_pii)
     else:
         raise ValueError(f"PII category not supported: {category}")
@@ -248,6 +257,19 @@ def choose_zip_format(fake_zip, real_zip):
         return digits + " " + letters
 
 
+def choose_email_format(fake_email, real_email):
+    # Helper function to use the same format for the fake email as the real email
+    triggers = ["@", "."]
+    if "@" in real_email:
+        return fake_email
+    elif any(trigger in real_email for trigger in [".", "mail", "com", "nl"]):
+        return fake_email.split("@")[1]
+    else:
+        return fake_email.split("@")[0]
+
+        
+
+
 def check_if_asr_error(category, real_pii, levenshtein_treshold):
     """
     Function to check if a real PII is an ASR error by comparing it to the list of all known PII for that category using Levenshtein distance.
@@ -291,10 +313,11 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
     real_to_fake_mapping = {}
     all_replacements = []
 
-    # Create a fake dob, address, and zipcode only once for every transcript. We assume that all mentions in the dialogue refer to the same dob/address/zipcode
+    # Create a fake dob, address, zipcode, and email only once for every transcript. We assume that all mentions in the dialogue refer to the same dob/address/zipcode/email
     fake_dob = pii_category_to_faker("DATE_OF_BIRTH_PII")
     fake_zip = pii_category_to_faker("LOCATION_ZIP_PII")
     fake_address = pii_category_to_faker("LOCATION_ADDRESS_PII")
+    fake_email = pii_category_to_faker("EMAIL_ADDRESS_PII")
 
     for annotation in annotations:
         category = annotation['category']
@@ -313,29 +336,31 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
             # Ensure case consistency between fake and real PII
             fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
             all_replacements.append(fake_pii)
+            continue
             
         # Else, we assume we have not seen this real_pii before
-        else:
-            if category == "DATE_OF_BIRTH_PII":
-                fake_pii = choose_dob_format(fake_dob, real_pii)
-            elif category == "LOCATION_ZIP_PII":
-                fake_pii = choose_zip_format(fake_zip, real_pii)
-            elif category == "LOCATION_ADDRESS_PII":
-                fake_pii = choose_address_format(fake_address, real_pii)
-            # Categories for which we have a reference list to check if the real PII is an ASR error, in which case we keep the original PII
-            elif category in ["NAME_GIVEN_PII", "NAME_FAMILY_PII", "LOCATION_CITY_PII"]:
-                if check_if_asr_error(category, real_pii, levenshtein_treshold):
-                    fake_pii = real_pii
-                else:
-                    fake_pii = pii_category_to_faker(category, real_pii)
-                    fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
+        if category == "DATE_OF_BIRTH_PII":
+            fake_pii = choose_dob_format(fake_dob, real_pii)
+        elif category == "LOCATION_ZIP_PII":
+            fake_pii = choose_zip_format(fake_zip, real_pii)
+        elif category == "LOCATION_ADDRESS_PII":
+            fake_pii = choose_address_format(fake_address, real_pii)
+        elif category == "EMAIL_ADDRESS_PII":
+            fake_pii = choose_email_format(fake_email, real_pii)
+        # Categories for which we have a reference list to check if the real PII is an ASR error, in which case we keep the original PII
+        elif category in ["NAME_GIVEN_PII", "NAME_FAMILY_PII", "LOCATION_CITY_PII"]:
+            if check_if_asr_error(category, real_pii, levenshtein_treshold):
+                fake_pii = real_pii
             else:
                 fake_pii = pii_category_to_faker(category, real_pii)
-                # Ensure case consistency between fake and real PII
                 fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
+        else:
+            fake_pii = pii_category_to_faker(category, real_pii)
+            # Ensure case consistency between fake and real PII
+            fake_pii = fake_pii.lower() if real_pii.islower() else fake_pii.upper() if real_pii.isupper() else fake_pii.title() if real_pii.istitle() else fake_pii
 
-            real_to_fake_mapping[real_pii.lower()] = fake_pii
-            all_replacements.append(fake_pii)
+        real_to_fake_mapping[real_pii.lower()] = fake_pii
+        all_replacements.append(fake_pii)
 
     return all_replacements
 
