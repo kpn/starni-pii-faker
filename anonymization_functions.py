@@ -67,11 +67,40 @@ NATIONALITIES = (
     'Turk', 'Marokkaan', 'Amerikaan', 'Canadees', 'Surinamer',
 )
 
+ZIP_SPELLING_NAMES = {
+    "A": ("Anna", "Anton", "Anne", "Anja", "Arthur", "Alex", "Adam"),
+    "B": ("Bernard", "Bert", "Bart", "Bas", "Bram", "Benjamin"),
+    "C": ("Cornelis", "Cor", "Cees", "Carla", "Chris", "Charlotte"),
+    "D": ("Dirk", "Daan", "David", "Dennis", "Diana", "Daphne"),
+    "E": ("Eduard", "Erik", "Eva", "Emma", "Esther", "Ellen"),
+    "F": ("Ferdinand", "Frank", "Frans", "Fred", "Fatima", "Femke"),
+    "G": ("Gerard", "Gerrit", "Gert", "Geert", "Gerda", "Guus"),
+    "H": ("Hendrik", "Henk", "Hans", "Herman", "Harry", "Hanneke"),
+    "I": ("Isaak", "Isa", "Iris", "Ingrid", "Irene", "Ilse", "Ivo"),
+    "J": ("Jan", "Johan", "Johannes", "Jacob", "Jaap", "Jeroen", "Julia"),
+    "K": ("Karel", "Kees", "Klaas", "Koen", "Kevin", "Karin", "Kim"),
+    "L": ("Lodewijk", "Leo", "Laura", "Linda", "Lisa", "Lars", "Lucas"),
+    "M": ("Maria", "Marie", "Maurits", "Marieke", "Mark", "Martin", "Mohammed"),
+    "N": ("Nico", "Niels", "Nick", "Noah", "Nina", "Naomi", "Natasja"),
+    "O": ("Otto", "Oscar", "Olaf", "Olivier", "Omar", "Olga"),
+    "P": ("Pieter", "Peter", "Piet", "Paul", "Patrick", "Petra", "Paula"),
+    "Q": ("Quinten", "Quintijn", "Quincy"),
+    "R": ("Rudolf", "Rob", "Robert", "Richard", "Ronald", "Ruben", "Ria"),
+    "S": ("Simon", "Sara", "Sophie", "Sandra", "Sander", "Stefan", "Sven"),
+    "T": ("Theodoor", "Theo", "Teun", "Tinus", "Thomas", "Tim", "Tom"),
+    "U": ("Ursula", "Udo"),
+    "V": ("Victor", "Vincent", "Vera", "Valerie"),
+    "W": ("Willem", "Wim", "Wouter", "Wilma", "Wendy", "Walter"),
+    "X": ("Xander", "Xavier"),
+    "Y": ("Yvonne", "Yvette", "Yolanda", "Yannick", "Yusuf"),
+    "Z": ("Zara", "Zoe"),
+}
+
 ###########################################################################################################################################################################
 
-CODE_BASED_CATEGORIES = set(["PHONE_NUMBER_PII", "INTERNAL_ID_PII", "BANK_ACCOUNT_PII", "CREDIT_CARD_PII", "SERIAL_NUMBER_PII", "SECRET_PII", "ICCID_PII", "MISC_PII"])
+CODE_BASED_CATEGORIES = set(["LOCATION_ZIP_PII", "PHONE_NUMBER_PII", "INTERNAL_ID_PII", "BANK_ACCOUNT_PII", "CREDIT_CARD_PII", "SERIAL_NUMBER_PII", "SECRET_PII", "ICCID_PII", "MISC_PII"])
 # For these PII categories, we assume that each appearance of the category in a transcript refers to the same underlying PII (e.g., same email address)
-UNIQUE_CATEGORIES = set(["DATE_OF_BIRTH_PII", "LOCATION_ZIP_PII", "LOCATION_ADDRESS_PII", "EMAIL_ADDRESS_PII"])
+UNIQUE_CATEGORIES = set(["DATE_OF_BIRTH_PII", "LOCATION_ADDRESS_PII", "EMAIL_ADDRESS_PII"])
 
 
 def pii_category_to_faker(category, levenshtein_treshold=0.79, real_pii=None, alphanumeric_mapping=None):
@@ -85,9 +114,6 @@ def pii_category_to_faker(category, levenshtein_treshold=0.79, real_pii=None, al
         return  str(fake.date_of_birth(minimum_age=18, maximum_age=80))
     elif category == "LOCATION_ADDRESS_PII":
         return fake.street_address()
-    elif category == "LOCATION_ZIP_PII":
-        # Also create fake names to use for the phonetic zipcode spelling
-        return [fake.postcode(), fake.first_name(), fake.first_name()]
     elif category == "LOCATION_CITY_PII":
         return fake.city()
     elif category == "LOCATION_OTHER_PII":
@@ -174,7 +200,16 @@ def replace_alphanumeric_string(category, real_pii, alphanumeric_mapping):
             result.append(char)
         position += 1
 
-    return ''.join(result)
+    replaced = ''.join(result)
+    # For LOCATION_ZIP_PII, names (phonetic spelling) should be replaced by new names instead of random letters
+    if category == "LOCATION_ZIP_PII":
+        replaced = re.sub(
+            r"\b[^\W\d_]{3,}\b",
+            lambda match: match.group() if match.group().lower() in SPELLED_OUT_NUMBERS
+            else random.choice(ZIP_SPELLING_NAMES[match.group()[0].upper()]),
+            replaced,
+        )
+    return replaced
 
 
 def choose_dob_format(fake_dob, real_dob):
@@ -229,61 +264,6 @@ def choose_address_format(fake_address, real_address):
         return ''.join(filter(str.isalpha, fake_address))
     else:
         return fake_address
-
-
-def choose_zip_format(fake_zip, real_zip):
-    # Helper function to use the same format for the fake zip as the real zip
-
-    fake_zip_digits = fake_zip[0]
-    # Remove letters (characters 5 and 6) from zip created by fake.postcode(), we want to use the first letters from the complete names created with fake.first_name()
-    fake_zip_digits = fake_zip_digits[:4]
-    fake_name_one = fake_zip[1]
-    fake_name_two = fake_zip[2]
-
-    # Decide digit format to use
-    digit_count = sum(char.isdigit() for char in real_zip)
-    if digit_count == 0:
-        digits = ""
-    elif digit_count == 1:
-        # Randomly pick 1 digit from fake
-        digits = random.choice([digit for digit in fake_zip_digits])
-    elif digit_count == 2:
-        # Randomly pick first 2 or last 2 fake digits
-        digits = random.choice([fake_zip_digits[:2], fake_zip_digits[2:]])
-    elif digit_count == 3:
-        # Randomly pick first 3 or last 3 fake digits
-        digits = random.choice([fake_zip_digits[:3], fake_zip_digits[1:]])
-    else:
-        # Else we assume real_zip contains all (4) digits
-        digits = fake_zip_digits
-
-    # Decide letter format to use
-    letter_count = sum(char.isalpha() for char in real_zip)
-    word_count = len([word for word in real_zip.split() if not any(char.isdigit() for char in word)])
-    # No letters means only digits
-    if letter_count == 0:
-        letters = ""
-     # 1 letter means only 1 initial
-    elif letter_count == 1:
-        letters = random.choice([fake_name_one[0], fake_name_two[0]])
-    # 2 letters means 2 initials
-    elif letter_count == 2:
-        letters = fake_name_one[0] + fake_name_two[0]
-    # 0 (word attached to digits) or 1 word (and more than 2 letters) means 1 name
-    elif word_count == 0 or word_count == 1:
-        letters = random.choice([fake_name_one, fake_name_two])
-    # 2 or more words (and more than 2 letters) means 2 names
-    elif word_count >= 2:
-        letters = fake_name_one + " " + fake_name_two
-
-    # If either digits or letters is empty, do not add a space between them
-    if digits == "" or letters == "":
-        return digits + letters
-    # Check if there is no space between digits and letters in real_zip by checking if there is any element containing both digits and letters
-    elif any(any(char.isdigit() for char in word) and any(char.isalpha() for char in word) for word in real_zip.split()):
-        return digits + letters
-    else:
-        return digits + " " + letters
 
 
 def choose_location_other(real_location, levenshtein_treshold):
@@ -352,9 +332,8 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
     real_to_fake_mapping = {}
     all_replacements = []
 
-    # Create a fake dob, address, zipcode, and email only once for every transcript. We assume that all mentions in the dialogue refer to the same dob/address/zipcode/email
+    # Create a fake dob, address, and email only once for every transcript. We assume that all mentions in the dialogue refer to the same dob/address/email
     fake_dob = pii_category_to_faker("DATE_OF_BIRTH_PII")
-    fake_zip = pii_category_to_faker("LOCATION_ZIP_PII")
     fake_address = pii_category_to_faker("LOCATION_ADDRESS_PII")
     fake_email = pii_category_to_faker("EMAIL_ADDRESS_PII")
     alphanumeric_mapping = create_alphanumeric_mapping()
@@ -381,8 +360,6 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
         # Else, we assume we have not seen this real_pii before
         if category == "DATE_OF_BIRTH_PII":
             fake_pii = choose_dob_format(fake_dob, real_pii)
-        elif category == "LOCATION_ZIP_PII":
-            fake_pii = choose_zip_format(fake_zip, real_pii)
         elif category == "LOCATION_ADDRESS_PII":
             fake_pii = choose_address_format(fake_address, real_pii)
         elif category == "EMAIL_ADDRESS_PII":
