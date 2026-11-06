@@ -318,7 +318,7 @@ def check_if_asr_error(category, real_pii, levenshtein_treshold):
         return True
 
 
-def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
+def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79, seed=None):
     """
     Function to obtain fake PII for all annotations of a transcript
     
@@ -329,6 +329,10 @@ def create_fake_pii_from_annotations(annotations, levenshtein_treshold=0.79):
     Returns:
         all_replacements (list): List of tuples containing the category, original PII, and the corresponding fake PII for each annotation in the transcript
     """
+    if seed is not None:
+        random.seed(seed)
+        fake.seed_instance(seed)
+
     real_to_fake_mapping = {}
     all_replacements = []
 
@@ -411,3 +415,4 @@ def create_anonymized_transcript_and_labels(original_transcript, original_annota
 
     return ''.join(anonymized_transcript), fake_pii_labels
 
+print(create_fake_pii_from_annotations([{"text":"32. 32 Leo Eluard","beginningIndex":2030,"endIndex":2047,"category":"LOCATION_ZIP_PII"}], seed=42))
